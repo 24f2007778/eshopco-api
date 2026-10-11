@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 
 app = FastAPI()
 
-# Allow requests from any origin, including browser dashboards.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["POST", "OPTIONS"],
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
