@@ -12,7 +12,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -25,9 +25,7 @@ class MetricsRequest(BaseModel):
 
 
 def percentile95(values):
-    """Calculate the 95th percentile using linear interpolation."""
     values = sorted(values)
-
     if len(values) == 1:
         return values[0]
 
@@ -51,15 +49,17 @@ def get_metrics(request: MetricsRequest):
     try:
         with DATA_FILE.open("r", encoding="utf-8") as file:
             data = json.load(file)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(
             status_code=500,
-            detail="Unable to read telemetry.json",
+            detail=f"Unable to read telemetry.json: {exc}",
         )
 
-    # Support either a JSON array or a common records wrapper.
     if isinstance(data, dict):
-        data = data.get("records", data.get("telemetry", data.get("data", [])))
+        data = data.get(
+            "records",
+            data.get("telemetry", data.get("data", [])),
+        )
 
     if not isinstance(data, list):
         raise HTTPException(
@@ -72,7 +72,7 @@ def get_metrics(request: MetricsRequest):
     for region in request.regions:
         records = [
             record for record in data
-            if record.get("region", "").lower() == region.lower()
+            if str(record.get("region", "")).lower() == region.lower()
         ]
 
         if not records:
@@ -84,12 +84,8 @@ def get_metrics(request: MetricsRequest):
             }
             continue
 
-        latencies = [
-            float(record["latency_ms"]) for record in records
-        ]
-        uptimes = [
-            float(record["uptime_pct"]) for record in records
-        ]
+        latencies = [float(r["latency_ms"]) for r in records]
+        uptimes = [float(r["uptime_pct"]) for r in records]
 
         results[region] = {
             "avg_latency": sum(latencies) / len(latencies),
